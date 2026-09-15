@@ -70,11 +70,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   height: 140,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF46B7FF), Color(0xFF1B7EF2)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: Colors.black,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.blue.withOpacity(0.25),
@@ -83,10 +79,11 @@ class _SplashScreenState extends State<SplashScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.water_drop_rounded,
-                    size: 72,
-                    color: Colors.white,
+                  child: Image.asset(
+                    'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png',
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 const SizedBox(height: 24),
