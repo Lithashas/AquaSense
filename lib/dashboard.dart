@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'firebase_service.dart';
 import 'sensor_card.dart';
 
 class AppHomeScreen extends StatefulWidget {
@@ -43,10 +45,7 @@ class _AppHomeScreenState extends State<AppHomeScreen> {
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
@@ -74,217 +73,326 @@ class DashboardScreen extends StatelessWidget {
     return average;
   }
 
+  Stream<WaterReading> _waterReadings() {
+    return FirebaseService.sensorData().map(
+      (event) => WaterReading.fromSnapshot(event.snapshot),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    const pH = 7.2;
-    const tds = 450.0;
-    const turbidity = 12.0;
-    const temp = 28.5;
-
-    final wqi = _calculateWqi(pH, tds, turbidity, temp);
-    final isGoodToUse = wqi >= 70;
-    final statusColor = isGoodToUse ? Colors.green : Colors.red;
-    final statusText = isGoodToUse ? 'Good to use' : 'Not suitable';
-
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text(
-          'AquaSense Dashboard',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('AquaSense Dashboard'),
         backgroundColor: Colors.blue[800],
         foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Live Reservoir Data',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Status: Device Online (Battery: 85%)',
-              style: TextStyle(fontSize: 14, color: Colors.green[700]),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.08,
-                children: [
-                  GestureDetector(
-                    onTap: () => onMetricSelected('pH'),
-                    child: const SensorCard(
-                      title: 'pH Level',
-                      value: '7.2',
-                      unit: 'pH',
-                      icon: Icons.science,
-                      color: Colors.purple,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => onMetricSelected('TDS'),
-                    child: const SensorCard(
-                      title: 'TDS',
-                      value: '450',
-                      unit: 'ppm',
-                      icon: Icons.water_drop,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => onMetricSelected('Turbidity'),
-                    child: const SensorCard(
-                      title: 'Turbidity',
-                      value: '12',
-                      unit: 'NTU',
-                      icon: Icons.blur_on,
-                      color: Colors.brown,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => onMetricSelected('Temp'),
-                    child: const SensorCard(
-                      title: 'Temp',
-                      value: '28.5',
-                      unit: '°C',
-                      icon: Icons.thermostat,
-                      color: Colors.orange,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => onMetricSelected('WQI'),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: statusColor.withOpacity(0.35)),
+      body: StreamBuilder<WaterReading>(
+        stream: FirebaseService.isConfigured ? _waterReadings() : null,
+        builder: (context, snapshot) {
+          if (!FirebaseService.isConfigured) {
+            return const _FirebaseMessage(
+              message:
+                  'Firebase is not configured. Run flutterfire configure, then restart the app.',
+              icon: Icons.settings_input_antenna_rounded,
+            );
+          }
+          if (snapshot.hasError) {
+            return _FirebaseMessage(
+              message:
+                  'Unable to read sensorData from Firebase. Check Firebase setup and database rules.',
+              icon: Icons.cloud_off_rounded,
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final reading = snapshot.data!;
+          final wqi = _calculateWqi(
+            reading.pH,
+            reading.tds,
+            reading.turbidity,
+            reading.temperature,
+          );
+          final isGoodToUse = wqi >= 70;
+          final statusColor = isGoodToUse ? Colors.green : Colors.red;
+          final statusText = isGoodToUse ? 'Good to use' : 'Not suitable';
+
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Live Reservoir Data',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'WQI',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            wqi.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: statusColor,
-                            ),
-                          ),
-                        ],
+                const SizedBox(height: 4),
+                Text(
+                  'Status: ${reading.online ? 'Device Online' : 'Device Offline'} (Battery: ${reading.battery.toStringAsFixed(0)}%)',
+                  style: TextStyle(fontSize: 14, color: Colors.green[700]),
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.08,
+                    children: [
+                      GestureDetector(
+                        onTap: () => onMetricSelected('pH'),
+                        child: SensorCard(
+                          title: 'pH Level',
+                          value: reading.pH.toStringAsFixed(2),
+                          unit: 'pH',
+                          icon: Icons.science,
+                          color: Colors.purple,
+                        ),
                       ),
+                      GestureDetector(
+                        onTap: () => onMetricSelected('TDS'),
+                        child: SensorCard(
+                          title: 'TDS',
+                          value: reading.tds.toStringAsFixed(0),
+                          unit: 'ppm',
+                          icon: Icons.water_drop,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => onMetricSelected('Turbidity'),
+                        child: SensorCard(
+                          title: 'Turbidity',
+                          value: reading.turbidity.toStringAsFixed(1),
+                          unit: 'NTU',
+                          icon: Icons.blur_on,
+                          color: Colors.brown,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => onMetricSelected('Temp'),
+                        child: SensorCard(
+                          title: 'Temp',
+                          value: reading.temperature.toStringAsFixed(1),
+                          unit: '°C',
+                          icon: Icons.thermostat,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: () => onMetricSelected('WQI'),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: statusColor.withOpacity(0.35)),
                     ),
-                    const SizedBox(width: 18),
-                    SizedBox(
-                      width: 110,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Status',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.black54,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Stack(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                height: 10,
-                                width: 110,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade300,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                              ),
-                              Container(
-                                height: 10,
-                                width: wqi.clamp(0.0, 100.0) / 100 * 110,
-                                decoration: BoxDecoration(
-                                  color: statusColor,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(
-                                isGoodToUse ? Icons.check_circle_rounded : Icons.warning_rounded,
-                                color: statusColor,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                statusText,
+                              const Text(
+                                'WQI',
                                 style: TextStyle(
-                                  color: statusColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                wqi.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 28,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 12,
+                                  color: statusColor,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 18),
+                        SizedBox(
+                          width: 110,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Status',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Stack(
+                                children: [
+                                  Container(
+                                    height: 10,
+                                    width: 110,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade300,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                  Container(
+                                    height: 10,
+                                    width: wqi.clamp(0.0, 100.0) / 100 * 110,
+                                    decoration: BoxDecoration(
+                                      color: statusColor,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(
+                                    isGoodToUse
+                                        ? Icons.check_circle_rounded
+                                        : Icons.warning_rounded,
+                                    color: statusColor,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    statusText,
+                                    style: TextStyle(
+                                      color: statusColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Manual reading requested from ESP32...')),
-                  );
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text(
-                  'Take Reading Now',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[800],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Manual reading requested from ESP32...',
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text(
+                      'Take Reading Now',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class WaterReading {
+  final double pH;
+  final double tds;
+  final double turbidity;
+  final double temperature;
+  final double battery;
+  final bool online;
+
+  const WaterReading({
+    required this.pH,
+    required this.tds,
+    required this.turbidity,
+    required this.temperature,
+    required this.battery,
+    required this.online,
+  });
+
+  factory WaterReading.fromSnapshot(DataSnapshot snapshot) {
+    final data = snapshot.value;
+    if (data is! Map) {
+      throw const FormatException(
+        'sensor_data must contain a map of sensor readings.',
+      );
+    }
+
+    double number(String key, String alternateKey) {
+      final value = data[key] ?? data[alternateKey];
+      if (value == null) {
+        throw FormatException('Missing sensor value: $key.');
+      }
+      if (value is num) return value.toDouble();
+      return double.parse(value.toString());
+    }
+
+    bool boolean(String key, {bool defaultValue = false}) {
+      final value = data[key];
+      if (value == null) return defaultValue;
+      if (value is bool) return value;
+      return value.toString().toLowerCase() == 'true';
+    }
+
+    return WaterReading(
+      pH: number('PH', 'pH'),
+      tds: number('TDS', 'tds'),
+      turbidity: number('Turbidity', 'turbidity'),
+      temperature: number('Temp', 'temperature'),
+      battery: number('Battery', 'battery'),
+      online: boolean('online', defaultValue: true),
+    );
+  }
+}
+
+class _FirebaseMessage extends StatelessWidget {
+  final String message;
+  final IconData icon;
+
+  const _FirebaseMessage({required this.message, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Colors.blueGrey),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -296,44 +404,13 @@ class DeviceConnectivityScreen extends StatefulWidget {
   const DeviceConnectivityScreen({super.key});
 
   @override
-  State<DeviceConnectivityScreen> createState() => _DeviceConnectivityScreenState();
+  State<DeviceConnectivityScreen> createState() =>
+      _DeviceConnectivityScreenState();
 }
 
 class _DeviceConnectivityScreenState extends State<DeviceConnectivityScreen> {
-  int _selectedIndex = 0;
-
   @override
   Widget build(BuildContext context) {
-    final devices = [
-      {
-        'name': 'Water Sensor Node 1',
-        'status': 'Connected',
-        'signal': '92%',
-        'icon': Icons.signal_wifi_4_bar_rounded,
-        'color': Colors.green,
-        'usage': 74.0,
-      },
-      {
-        'name': 'Pump Controller',
-        'status': 'Stable',
-        'signal': '87%',
-        'icon': Icons.power_rounded,
-        'color': Colors.teal,
-        'usage': 63.0,
-      },
-      {
-        'name': 'Battery Pack',
-        'status': 'Charging',
-        'signal': '85%',
-        'icon': Icons.battery_charging_full_rounded,
-        'color': Colors.orange,
-        'usage': 58.0,
-      },
-    ];
-
-    final selectedDevice = devices[_selectedIndex];
-    final isOnline = selectedDevice['status'] == 'Connected' || selectedDevice['status'] == 'Stable';
-
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -346,117 +423,89 @@ class _DeviceConnectivityScreenState extends State<DeviceConnectivityScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView(
-          children: [
-            ...List.generate(devices.length, (index) {
-              final device = devices[index];
-              final isActive = index == _selectedIndex;
-              final activeColor = device['color'] as Color;
+      body: StreamBuilder<DatabaseEvent>(
+        stream: FirebaseService.isConfigured
+            ? FirebaseService.connectivityData()
+            : null,
+        builder: (context, snapshot) {
+          if (!FirebaseService.isConfigured || snapshot.hasError) {
+            return const _FirebaseMessage(
+              message: 'Unable to read circuit connectivity from Firebase.',
+              icon: Icons.cloud_off_rounded,
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              return GestureDetector(
-                onTap: () => setState(() => _selectedIndex = index),
-                child: Card(
+          final status = CircuitStatus.fromSnapshot(snapshot.data!.snapshot);
+          final cards = [
+            (
+              'Sensor Status',
+              status.sensorConnected ? 'Connected' : 'Not detected',
+              status.sensorConnected ? 'Live sensor values received' : 'Check sensor wiring',
+              Icons.sensors_rounded,
+              status.sensorConnected ? Colors.green : Colors.red,
+            ),
+            (
+              'Wi-Fi Connectivity',
+              status.wifiConnected ? 'Connected' : 'Offline',
+              status.wifiConnected ? 'Circuit is reporting to Firebase' : 'No circuit data received',
+              Icons.wifi_rounded,
+              status.wifiConnected ? Colors.blue : Colors.red,
+            ),
+            (
+              'Battery Pack',
+              '${status.battery.toStringAsFixed(0)}%',
+              'Realtime battery level',
+              Icons.battery_charging_full_rounded,
+              Colors.orange,
+            ),
+          ];
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              ...cards.map(
+                (card) => Card(
                   margin: const EdgeInsets.only(bottom: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  color: isActive ? activeColor.withOpacity(0.08) : Colors.white,
                   child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     leading: CircleAvatar(
-                      backgroundColor: isActive ? activeColor.withOpacity(0.18) : (isOnline ? Colors.green[100] : Colors.orange[100]),
-                      child: Icon(
-                        device['icon'] as IconData,
-                        color: isActive ? activeColor : (isOnline ? Colors.green[700] : Colors.orange[700]),
-                      ),
+                      backgroundColor: card.$5.withOpacity(0.16),
+                      child: Icon(card.$4, color: card.$5),
                     ),
-                    title: Text(device['name'] as String),
-                    subtitle: Text(device['status'] as String),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('Signal'),
-                        Text(
-                          device['signal'] as String,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
+                    title: Text(card.$1),
+                    subtitle: Text('${card.$2}\n${card.$3}'),
+                    isThreeLine: true,
                   ),
                 ),
-              );
-            }),
-            const SizedBox(height: 8),
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          selectedDevice['name'] as String,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: (selectedDevice['color'] as Color).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            '${selectedDevice['usage']}% used',
-                            style: TextStyle(
-                              color: selectedDevice['color'] as Color,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Center(
-                      child: SizedBox(
-                        width: 180,
-                        height: 180,
-                        child: CustomPaint(
-                          painter: DeviceUsagePieChartPainter(
-                            used: selectedDevice['usage'] as double,
-                            color: selectedDevice['color'] as Color,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _LegendDot(color: selectedDevice['color'] as Color),
-                        const SizedBox(width: 8),
-                        const Text('Used'),
-                        const SizedBox(width: 18),
-                        const _LegendDot(color: Colors.grey),
-                        const SizedBox(width: 8),
-                        const Text('Available'),
-                      ],
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 4),
+              Text(
+                status.lastSeen == null
+                    ? 'Sensor health is based on the latest values received.'
+                    : 'Last seen: ${_formatLastSeen(status.lastSeen!)}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[700]),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  String _formatLastSeen(DateTime value) {
+    final local = value.toLocal();
+    final time = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    return '$time, ${local.day}/${local.month}/${local.year}';
   }
 }
 
@@ -470,10 +519,7 @@ class _LegendDot extends StatelessWidget {
     return Container(
       width: 12,
       height: 12,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
@@ -519,12 +565,21 @@ class DeviceUsagePieChartPainter extends CustomPainter {
       fontSize: 22,
       fontWeight: FontWeight.bold,
     );
-    final textSpan = TextSpan(text: '${used.toStringAsFixed(0)}%', style: labelStyle);
+    final textSpan = TextSpan(
+      text: '${used.toStringAsFixed(0)}%',
+      style: labelStyle,
+    );
     final textPainter = TextPainter(
       text: textSpan,
       textDirection: TextDirection.ltr,
     )..layout();
-    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy - textPainter.height / 2));
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      ),
+    );
 
     final annotationStyle = TextStyle(
       color: Colors.grey.shade700,
@@ -602,11 +657,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
     ),
   ];
 
-  static const List<String> _weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  static const List<String> _weekdays = [
+    'Sun',
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+  ];
   static const List<int> _dayNumbers = [22, 23, 24, 25, 26, 27, 28];
-  static const List<String> _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+  static const List<String> _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+  ];
 
-  List<double> _dailyValuesForMetric(_MetricReport metric, int selectedDayIndex, int monthIndex) {
+  List<double> _dailyValuesForMetric(
+    _MetricReport metric,
+    int selectedDayIndex,
+    int monthIndex,
+  ) {
     final base = metric.values;
     final dayAdjust = (selectedDayIndex + 1) * 0.18;
     final monthAdjust = (monthIndex + 1) * 0.35;
@@ -622,7 +696,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _ => 0.0,
       };
 
-      final value = base[index] + dayAdjust + monthAdjust + slotAdjust + metricAdjust;
+      final value =
+          base[index] + dayAdjust + monthAdjust + slotAdjust + metricAdjust;
       return switch (metric.id) {
         'pH' => value.clamp(6.0, 8.5).toDouble(),
         'TDS' => value.clamp(350.0, 520.0).toDouble(),
@@ -635,9 +710,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   List<double> _monthlyValuesForMetric(_MetricReport metric, int monthIndex) {
-    final monthlyPattern = [
-      0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0,
-    ];
+    final monthlyPattern = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0];
 
     return monthlyPattern.asMap().entries.map((entry) {
       final index = entry.key;
@@ -650,7 +723,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
         'WQI' => 4.0,
         _ => 0.0,
       };
-      final value = metric.values[index % metric.values.length] + pos + (monthIndex * 1.8) + metricBias;
+      final value =
+          metric.values[index % metric.values.length] +
+          pos +
+          (monthIndex * 1.8) +
+          metricBias;
       return switch (metric.id) {
         'pH' => value.clamp(6.0, 8.5).toDouble(),
         'TDS' => value.clamp(350.0, 520.0).toDouble(),
@@ -670,7 +747,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final metrics = widget.selectedMetric == 'Overview'
         ? _allMetrics
-        : [selectedReport, ..._allMetrics.where((metric) => metric.id != selectedReport.id)];
+        : [
+            selectedReport,
+            ..._allMetrics.where((metric) => metric.id != selectedReport.id),
+          ];
 
     if (_viewMode == 'Monthly') {
       final monthlyLabels = ['01', '05', '10', '15', '20', '25', '30'];
@@ -693,19 +773,70 @@ class _ReportsScreenState extends State<ReportsScreen> {
         title: metric.title,
         unit: metric.unit,
         color: metric.color,
-        values: _dailyValuesForMetric(metric, _selectedDayIndex, _selectedMonthIndex),
+        values: _dailyValuesForMetric(
+          metric,
+          _selectedDayIndex,
+          _selectedMonthIndex,
+        ),
         labels: dailyLabels,
+      );
+    }).toList();
+  }
+
+  List<_MetricReport> _buildHistoryMetricList(List<HistoryReading> readings) {
+    final selectedReport = _allMetrics.firstWhere(
+      (metric) => metric.id == widget.selectedMetric,
+      orElse: () => _allMetrics.first,
+    );
+    final metricOrder = widget.selectedMetric == 'Overview'
+        ? _allMetrics
+        : [
+            selectedReport,
+            ..._allMetrics.where((metric) => metric.id != selectedReport.id),
+          ];
+    final points = readings.length > 30
+        ? readings.sublist(readings.length - 30)
+        : readings;
+
+    double wqi(HistoryReading reading) {
+      final pHScore = (100 - (reading.pH - 7.0).abs() * 35).clamp(0.0, 100.0);
+      final tdsScore =
+          (100 - ((reading.tds - 500).abs() / 500) * 100).clamp(0.0, 100.0);
+      final turbidityScore =
+          (100 - (reading.turbidity * 4.5)).clamp(0.0, 100.0);
+      final tempScore =
+          (100 - (reading.temperature - 25.0).abs() * 6).clamp(0.0, 100.0);
+      return (pHScore + tdsScore + turbidityScore + tempScore) / 4;
+    }
+
+    return metricOrder.map((metric) {
+      final values = points.map((reading) {
+        return switch (metric.id) {
+          'pH' => reading.pH,
+          'TDS' => reading.tds,
+          'Turbidity' => reading.turbidity,
+          'Temp' => reading.temperature,
+          'WQI' => wqi(reading),
+          _ => 0.0,
+        };
+      }).toList();
+      final labels = points.map((reading) {
+        final time = reading.timestamp.toLocal();
+        return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+      }).toList();
+      return _MetricReport(
+        id: metric.id,
+        title: metric.title,
+        unit: metric.unit,
+        color: metric.color,
+        values: values,
+        labels: labels,
       );
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final metrics = _buildMetricList();
-    final selectedDateText = _viewMode == 'Daily'
-        ? 'February 2025'
-        : '${_months[_selectedMonthIndex]} 2025';
-
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -718,10 +849,49 @@ class _ReportsScreenState extends State<ReportsScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView(
+      body: StreamBuilder<List<HistoryReading>>(
+        stream: FirebaseService.isConfigured
+            ? FirebaseService.sensorHistory()
+            : null,
+        builder: (context, snapshot) {
+          if (!FirebaseService.isConfigured) {
+            return const _FirebaseMessage(
+              message:
+                  'Firebase is not configured. Run flutterfire configure, then restart the app.',
+              icon: Icons.settings_input_antenna_rounded,
+            );
+          }
+          if (snapshot.hasError) {
+            return const _FirebaseMessage(
+              message:
+                  'Unable to read sensorHistory from Firebase. Check database rules.',
+              icon: Icons.cloud_off_rounded,
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final hasHistory = snapshot.data!.isNotEmpty;
+          final metrics = hasHistory
+              ? _buildHistoryMetricList(snapshot.data!)
+              : _buildMetricList();
+          final selectedDateText = hasHistory
+              ? 'Firebase history'
+              : 'Sample trends - no history yet';
+
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: ListView(
           children: [
+            if (!hasHistory)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Charts show sample values until readings are saved under /sensorHistory.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54),
+                ),
+              ),
             Container(
               margin: const EdgeInsets.only(bottom: 14),
               decoration: BoxDecoration(
@@ -736,11 +906,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.calendar_today_rounded, size: 18, color: Colors.black87),
+                          const Icon(
+                            Icons.calendar_today_rounded,
+                            size: 18,
+                            color: Colors.black87,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             selectedDateText,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -749,9 +926,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           IconButton(
                             onPressed: () {
                               if (_viewMode == 'Daily') {
-                                setState(() => _selectedDayIndex = (_selectedDayIndex - 1).clamp(0, _dayNumbers.length - 1));
+                                setState(
+                                  () => _selectedDayIndex =
+                                      (_selectedDayIndex - 1).clamp(
+                                        0,
+                                        _dayNumbers.length - 1,
+                                      ),
+                                );
                               } else {
-                                setState(() => _selectedMonthIndex = (_selectedMonthIndex - 1).clamp(0, _months.length - 1));
+                                setState(
+                                  () => _selectedMonthIndex =
+                                      (_selectedMonthIndex - 1).clamp(
+                                        0,
+                                        _months.length - 1,
+                                      ),
+                                );
                               }
                             },
                             icon: const Icon(Icons.chevron_left),
@@ -760,9 +949,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           IconButton(
                             onPressed: () {
                               if (_viewMode == 'Daily') {
-                                setState(() => _selectedDayIndex = (_selectedDayIndex + 1).clamp(0, _dayNumbers.length - 1));
+                                setState(
+                                  () => _selectedDayIndex =
+                                      (_selectedDayIndex + 1).clamp(
+                                        0,
+                                        _dayNumbers.length - 1,
+                                      ),
+                                );
                               } else {
-                                setState(() => _selectedMonthIndex = (_selectedMonthIndex + 1).clamp(0, _months.length - 1));
+                                setState(
+                                  () => _selectedMonthIndex =
+                                      (_selectedMonthIndex + 1).clamp(
+                                        0,
+                                        _months.length - 1,
+                                      ),
+                                );
                               }
                             },
                             icon: const Icon(Icons.chevron_right),
@@ -787,10 +988,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: _viewMode == 'Daily' ? Colors.white : Colors.transparent,
+                                color: _viewMode == 'Daily'
+                                    ? Colors.white
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(999),
                                 boxShadow: _viewMode == 'Daily'
-                                    ? [const BoxShadow(color: Color(0x0F000000), blurRadius: 4)]
+                                    ? [
+                                        const BoxShadow(
+                                          color: Color(0x0F000000),
+                                          blurRadius: 4,
+                                        ),
+                                      ]
                                     : null,
                               ),
                               child: const Center(child: Text('Daily')),
@@ -803,10 +1011,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: _viewMode == 'Monthly' ? Colors.white : Colors.transparent,
+                                color: _viewMode == 'Monthly'
+                                    ? Colors.white
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(999),
                                 boxShadow: _viewMode == 'Monthly'
-                                    ? [const BoxShadow(color: Color(0x0F000000), blurRadius: 4)]
+                                    ? [
+                                        const BoxShadow(
+                                          color: Color(0x0F000000),
+                                          blurRadius: 4,
+                                        ),
+                                      ]
                                     : null,
                               ),
                               child: const Center(child: Text('Monthly')),
@@ -823,12 +1038,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         final isSelected = index == _selectedDayIndex;
                         return Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() => _selectedDayIndex = index),
+                            onTap: () =>
+                                setState(() => _selectedDayIndex = index),
                             child: Container(
                               margin: const EdgeInsets.symmetric(horizontal: 4),
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF7B4DE2) : Colors.transparent,
+                                color: isSelected
+                                    ? const Color(0xFF7B4DE2)
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Column(
@@ -837,7 +1055,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     _weekdays[index],
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: isSelected ? Colors.white : Colors.black87,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.black87,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -846,7 +1066,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
-                                      color: isSelected ? Colors.white : Colors.black87,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.black87,
                                     ),
                                   ),
                                 ],
@@ -862,12 +1084,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         final isSelected = index == _selectedMonthIndex;
                         return Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() => _selectedMonthIndex = index),
+                            onTap: () =>
+                                setState(() => _selectedMonthIndex = index),
                             child: Container(
                               margin: const EdgeInsets.symmetric(horizontal: 4),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF7B4DE2) : Colors.transparent,
+                                color: isSelected
+                                    ? const Color(0xFF7B4DE2)
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Center(
@@ -875,7 +1100,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   _months[index],
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    color: isSelected ? Colors.white : Colors.black87,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.black87,
                                   ),
                                 ),
                               ),
@@ -893,7 +1120,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 padding: const EdgeInsets.only(bottom: 18),
                 child: _ReportCard(
                   title: metric.title,
-                  subtitle: _viewMode == 'Daily' ? 'Selected date: ${_dayNumbers[_selectedDayIndex]}' : 'Selected month: ${_months[_selectedMonthIndex]}',
+                  subtitle: _viewMode == 'Daily'
+                      ? 'Selected date: ${_dayNumbers[_selectedDayIndex]}'
+                      : 'Selected month: ${_months[_selectedMonthIndex]}',
                   child: SizedBox(
                     height: 220,
                     width: 900,
@@ -916,6 +1145,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
           ],
         ),
+      );
+        },
       ),
     );
   }
@@ -959,7 +1190,10 @@ class _StatusTile extends StatelessWidget {
               ),
               Text(
                 value,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
@@ -1014,16 +1248,10 @@ class _ReportCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
+            Text(subtitle, style: TextStyle(color: Colors.grey[600])),
             const SizedBox(height: 14),
             child,
           ],
@@ -1078,12 +1306,23 @@ class TrendChartPainter extends CustomPainter {
     final points = <Offset>[];
     for (int i = 0; i < values.length; i++) {
       final x = left + (i / (values.length - 1)) * chartWidth;
-      final y = size.height - bottom - ((values[i] - minValue) / (yRange == 0 ? 1 : yRange)) * chartHeight;
+      final y =
+          size.height -
+          bottom -
+          ((values[i] - minValue) / (yRange == 0 ? 1 : yRange)) * chartHeight;
       points.add(Offset(x, y));
     }
 
-    canvas.drawLine(Offset(left, top), Offset(left, size.height - bottom), axisPaint);
-    canvas.drawLine(Offset(left, size.height - bottom), Offset(size.width - right, size.height - bottom), axisPaint);
+    canvas.drawLine(
+      Offset(left, top),
+      Offset(left, size.height - bottom),
+      axisPaint,
+    );
+    canvas.drawLine(
+      Offset(left, size.height - bottom),
+      Offset(size.width - right, size.height - bottom),
+      axisPaint,
+    );
 
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
@@ -1106,7 +1345,10 @@ class TrendChartPainter extends CustomPainter {
         text: TextSpan(text: label, style: textStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      textPainter.paint(canvas, Offset(x - textPainter.width / 2, size.height - 22));
+      textPainter.paint(
+        canvas,
+        Offset(x - textPainter.width / 2, size.height - 22),
+      );
     }
 
     final unitTextSpan = TextSpan(
