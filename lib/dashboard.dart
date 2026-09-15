@@ -68,103 +68,64 @@ class DashboardScreen extends StatelessWidget {
     final tdsScore = (100 - ((tds - 500).abs() / 500) * 100).clamp(0.0, 100.0);
     final turbidityScore = (100 - (turbidity * 4.5)).clamp(0.0, 100.0);
     final tempScore = (100 - (temp - 25.0).abs() * 6).clamp(0.0, 100.0);
-
     final average = (pHScore + tdsScore + turbidityScore + tempScore) / 4;
     return average;
   }
 
-  Stream<WaterReading> _waterReadings() {
-    return FirebaseService.sensorData().map(
-      (event) => WaterReading.fromSnapshot(event.snapshot),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF1FBFC),
-      appBar: AppBar(
-        title: const Text('AquaSense Dashboard'),
-        backgroundColor: Colors.blue[800],
-        foregroundColor: Colors.white,
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Live Reservoir Data',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Status: Device Online (Battery: 85%)',
-              style: TextStyle(fontSize: 14, color: Colors.green[700]),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.08,
-                children: [
-                  GestureDetector(
-                    onTap: () => onMetricSelected('pH'),
-                    child: const SensorCard(
-                      title: 'pH Level',
-                      value: '7.2',
-                      unit: 'pH',
-                      icon: Icons.science,
-                      color: const Color(0xFF0B7285),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => onMetricSelected('TDS'),
-                    child: const SensorCard(
-                      title: 'TDS',
-                      value: '450',
-                      unit: 'ppm',
-                      icon: Icons.water_drop,
-                      color: const Color(0xFF12B8C4),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => onMetricSelected('Turbidity'),
-                    child: const SensorCard(
-                      title: 'Turbidity',
-                      value: '12',
-                      unit: 'NTU',
-                      icon: Icons.blur_on,
-                      color: const Color(0xFF087F8C),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => onMetricSelected('Temp'),
-                    child: const SensorCard(
-                      title: 'Temp',
-                      value: '28.5',
-                      unit: '°C',
-                      icon: Icons.thermostat,
-                      color: const Color(0xFF0F9D9A),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => onMetricSelected('WQI'),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: statusColor.withOpacity(0.35)),
+    return StreamBuilder<WaterReading>(
+      stream: FirebaseService.isConfigured
+          ? FirebaseService.sensorData().map(
+              (event) => WaterReading.fromSnapshot(event.snapshot),
+            )
+          : null,
+      builder: (context, snapshot) {
+        if (!FirebaseService.isConfigured) {
+          return const _FirebaseMessage(
+            message:
+                'Firebase is not configured. Run flutterfire configure, then restart the app.',
+            icon: Icons.settings_input_antenna_rounded,
+          );
+        }
+        if (snapshot.hasError) {
+          return const _FirebaseMessage(
+            message: 'Unable to read live sensor data from Firebase.',
+            icon: Icons.cloud_off_rounded,
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final reading = snapshot.data!;
+        final wqi = _calculateWqi(
+          reading.pH,
+          reading.tds,
+          reading.turbidity,
+          reading.temperature,
+        );
+        final isGoodToUse = wqi >= 70;
+        final statusColor = isGoodToUse ? Colors.green : Colors.orange;
+        final statusText = isGoodToUse ? 'Good' : 'Needs attention';
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF1FBFC),
+          appBar: AppBar(
+            title: const Text('AquaSense Dashboard'),
+            backgroundColor: const Color(0xFF073B4C),
+            foregroundColor: Colors.white,
+            centerTitle: true,
+            elevation: 0,
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Live Reservoir Data',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -172,13 +133,14 @@ class DashboardScreen extends StatelessWidget {
                   style: TextStyle(fontSize: 14, color: Colors.green[700]),
                 ),
                 const SizedBox(height: 20),
-                Expanded(
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.08,
-                    children: [
+                GridView.count(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.0,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
                       GestureDetector(
                         onTap: () => onMetricSelected('pH'),
                         child: SensorCard(
@@ -186,7 +148,7 @@ class DashboardScreen extends StatelessWidget {
                           value: reading.pH.toStringAsFixed(2),
                           unit: 'pH',
                           icon: Icons.science,
-                          color: Colors.purple,
+                          color: const Color(0xFF0B7285),
                         ),
                       ),
                       GestureDetector(
@@ -196,7 +158,7 @@ class DashboardScreen extends StatelessWidget {
                           value: reading.tds.toStringAsFixed(0),
                           unit: 'ppm',
                           icon: Icons.water_drop,
-                          color: Colors.blue,
+                          color: const Color(0xFF12B8C4),
                         ),
                       ),
                       GestureDetector(
@@ -206,7 +168,7 @@ class DashboardScreen extends StatelessWidget {
                           value: reading.turbidity.toStringAsFixed(1),
                           unit: 'NTU',
                           icon: Icons.blur_on,
-                          color: Colors.brown,
+                          color: const Color(0xFF087F8C),
                         ),
                       ),
                       GestureDetector(
@@ -216,11 +178,10 @@ class DashboardScreen extends StatelessWidget {
                           value: reading.temperature.toStringAsFixed(1),
                           unit: '°C',
                           icon: Icons.thermostat,
-                          color: Colors.orange,
+                          color: const Color(0xFF0F9D9A),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 GestureDetector(
@@ -322,19 +283,11 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF087F8C),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
               ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -469,13 +422,6 @@ class _DeviceConnectivityScreenState extends State<DeviceConnectivityScreen> {
               Icons.wifi_rounded,
               status.wifiConnected ? Colors.blue : Colors.red,
             ),
-            (
-              'Battery Pack',
-              '${status.battery.toStringAsFixed(0)}%',
-              'Realtime battery level',
-              Icons.battery_charging_full_rounded,
-              Colors.orange,
-            ),
           ];
 
           return ListView(
@@ -502,6 +448,63 @@ class _DeviceConnectivityScreenState extends State<DeviceConnectivityScreen> {
                   ),
                 ),
               ),
+              Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BatteryUsageScreen(
+                          batteryPercentage: status.battery,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: Colors.orange.withOpacity(0.16),
+                          child: const Icon(
+                            Icons.battery_charging_full_rounded,
+                            color: Colors.orange,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Battery Pack',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Realtime battery level',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Colors.black38,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 4),
               Text(
                 status.lastSeen == null
@@ -521,6 +524,114 @@ class _DeviceConnectivityScreenState extends State<DeviceConnectivityScreen> {
     final local = value.toLocal();
     final time = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
     return '$time, ${local.day}/${local.month}/${local.year}';
+  }
+}
+
+class BatteryUsageScreen extends StatelessWidget {
+  final double batteryPercentage;
+
+  const BatteryUsageScreen({super.key, required this.batteryPercentage});
+
+  @override
+  Widget build(BuildContext context) {
+    final used = batteryPercentage.clamp(0.0, 100.0).toDouble();
+    final remaining = 100.0 - used;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF1FBFC),
+      appBar: AppBar(
+        title: const Text('Battery Usage'),
+        backgroundColor: const Color(0xFF073B4C),
+        foregroundColor: Colors.white,
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const Text(
+                'Battery Pack',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Realtime battery level',
+                style: TextStyle(fontSize: 16, color: Colors.black54),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: 260,
+                height: 260,
+                child: CustomPaint(
+                  painter: DeviceUsagePieChartPainter(
+                    used: used,
+                    color: Colors.orange,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              _BatteryPercentageRow(
+                color: Colors.orange,
+                label: 'Used',
+                percentage: used,
+              ),
+              const SizedBox(height: 16),
+              _BatteryPercentageRow(
+                color: Colors.grey.shade300,
+                label: 'Remaining',
+                percentage: remaining,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BatteryPercentageRow extends StatelessWidget {
+  final Color color;
+  final String label;
+  final double percentage;
+
+  const _BatteryPercentageRow({
+    required this.color,
+    required this.label,
+    required this.percentage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Text(
+            '${percentage.toStringAsFixed(0)}%',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -600,7 +711,7 @@ class DeviceUsagePieChartPainter extends CustomPainter {
       color: Colors.grey.shade700,
       fontSize: 11,
     );
-    final annotationSpan = TextSpan(text: 'Usage', style: annotationStyle);
+    final annotationSpan = TextSpan(text: 'Used', style: annotationStyle);
     final annotationPainter = TextPainter(
       text: annotationSpan,
       textDirection: TextDirection.ltr,
@@ -626,8 +737,16 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   String _viewMode = 'Daily';
-  int _selectedDayIndex = 2;
   int _selectedMonthIndex = 1;
+  late DateTime _selectedDate;
+  late DateTime _selectedMonth;
+  bool _alertShownForDate = false;
+
+  _ReportsScreenState() {
+    final now = DateTime.now();
+    _selectedDate = DateTime(now.year, now.month, now.day);
+    _selectedMonth = DateTime(now.year, now.month);
+  }
 
   static const List<_MetricReport> _allMetrics = [
     _MetricReport(
@@ -637,6 +756,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       color: Colors.purple,
       values: [6.8, 7.0, 7.1, 7.2, 7.3, 7.2, 7.1],
       labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+      minValue: 0,
+      maxValue: 14,
     ),
     _MetricReport(
       id: 'TDS',
@@ -645,6 +766,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       color: Colors.blue,
       values: [420, 440, 470, 450, 460, 430, 450],
       labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+      minValue: 0,
+      maxValue: 100,
     ),
     _MetricReport(
       id: 'Turbidity',
@@ -653,6 +776,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       color: Colors.brown,
       values: [15, 14, 12, 11, 13, 12, 12],
       labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+      minValue: 0,
+      maxValue: 100,
     ),
     _MetricReport(
       id: 'Temp',
@@ -661,6 +786,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       color: Colors.orange,
       values: [26.5, 27.0, 28.1, 28.5, 29.0, 28.4, 28.5],
       labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+      minValue: 0,
+      maxValue: 40,
     ),
     _MetricReport(
       id: 'WQI',
@@ -669,6 +796,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       color: Colors.green,
       values: [70, 74, 76, 79, 81, 77, 77],
       labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+      minValue: 0,
+      maxValue: 100,
     ),
   ];
 
@@ -689,7 +818,75 @@ class _ReportsScreenState extends State<ReportsScreen> {
     'Apr',
     'May',
     'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
+
+  List<DateTime> _daysInSelectedMonth() {
+    final daysInMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0).day;
+    return List.generate(
+      daysInMonth,
+      (index) => DateTime(_selectedMonth.year, _selectedMonth.month, index + 1),
+    );
+  }
+
+  List<HistoryReading> _readingsForDate(
+    List<HistoryReading> readings,
+    DateTime selectedDate,
+  ) {
+    return readings.where((reading) {
+      final local = reading.timestamp.toLocal();
+      return local.year == selectedDate.year &&
+          local.month == selectedDate.month &&
+          local.day == selectedDate.day;
+    }).toList();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(_selectedMonth.year, _selectedMonth.month, 1),
+      lastDate: DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0),
+      currentDate: _selectedDate,
+    );
+
+    if (picked == null) return;
+
+    setState(() {
+      _selectedDate = picked;
+      _selectedMonth = DateTime(picked.year, picked.month);
+      _selectedMonthIndex = picked.month - 1;
+      _alertShownForDate = false;
+    });
+  }
+
+  Future<void> _showNoDataDialog(DateTime date) async {
+    _alertShownForDate = true;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('No data recorded'),
+        content: Text(
+          'No data was recorded on ${_formatDate(date)}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
 
   List<double> _dailyValuesForMetric(
     _MetricReport metric,
@@ -725,33 +922,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   List<double> _monthlyValuesForMetric(_MetricReport metric, int monthIndex) {
-    final monthlyPattern = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0];
+    final daysInMonth = DateTime(DateTime.now().year, monthIndex + 2, 0).day;
+    final base = metric.values;
 
-    return monthlyPattern.asMap().entries.map((entry) {
-      final index = entry.key;
-      final pos = entry.value;
+    return List.generate(daysInMonth, (dayIndex) {
+      final dayNumber = dayIndex + 1;
+      final dailyWave = dayNumber * 0.18;
       final metricBias = switch (metric.id) {
-        'pH' => 0.2,
-        'TDS' => 12.0,
-        'Turbidity' => 1.8,
-        'Temp' => 1.5,
-        'WQI' => 4.0,
+        'pH' => 0.18,
+        'TDS' => 8.0,
+        'Turbidity' => 1.0,
+        'Temp' => 0.8,
+        'WQI' => 2.5,
         _ => 0.0,
       };
       final value =
-          metric.values[index % metric.values.length] +
-          pos +
-          (monthIndex * 1.8) +
+          base[dayIndex % base.length] +
+          dailyWave +
+          (monthIndex * 1.6) +
           metricBias;
       return switch (metric.id) {
-        'pH' => value.clamp(6.0, 8.5).toDouble(),
-        'TDS' => value.clamp(350.0, 520.0).toDouble(),
-        'Turbidity' => value.clamp(5.0, 25.0).toDouble(),
-        'Temp' => value.clamp(24.0, 34.0).toDouble(),
-        'WQI' => value.clamp(55.0, 95.0).toDouble(),
+        'pH' => value.clamp(0.0, 14.0).toDouble(),
+        'TDS' => value.clamp(0.0, 100.0).toDouble(),
+        'Turbidity' => value.clamp(0.0, 100.0).toDouble(),
+        'Temp' => value.clamp(0.0, 40.0).toDouble(),
+        'WQI' => value.clamp(0.0, 100.0).toDouble(),
         _ => value.toDouble(),
       };
-    }).toList();
+    });
   }
 
   List<_MetricReport> _buildMetricList() {
@@ -768,7 +966,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ];
 
     if (_viewMode == 'Monthly') {
-      final monthlyLabels = ['01', '05', '10', '15', '20', '25', '30'];
+      final daysInMonth = DateTime(
+        DateTime.now().year,
+        _selectedMonthIndex + 2,
+        0,
+      ).day;
+      final monthlyLabels = List.generate(daysInMonth, (index) => (index + 1).toString());
       return metrics.map((metric) {
         return _MetricReport(
           id: metric.id,
@@ -777,10 +980,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
           color: metric.color,
           values: _monthlyValuesForMetric(metric, _selectedMonthIndex),
           labels: monthlyLabels,
+          minValue: metric.minValue,
+          maxValue: metric.maxValue,
         );
       }).toList();
     }
 
+    final selectedDayValue = (_selectedDate.day - 1).clamp(0, _dayNumbers.length - 1);
     final dailyLabels = ['00:00', '06:00', '12:00', '18:00', '00:00'];
     return metrics.map((metric) {
       return _MetricReport(
@@ -790,10 +996,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         color: metric.color,
         values: _dailyValuesForMetric(
           metric,
-          _selectedDayIndex,
+          selectedDayValue,
           _selectedMonthIndex,
         ),
         labels: dailyLabels,
+        minValue: metric.minValue,
+        maxValue: metric.maxValue,
       );
     }).toList();
   }
@@ -809,6 +1017,69 @@ class _ReportsScreenState extends State<ReportsScreen> {
             selectedReport,
             ..._allMetrics.where((metric) => metric.id != selectedReport.id),
           ];
+
+    if (_viewMode == 'Monthly') {
+      final monthReadings = readings.where((reading) {
+        final local = reading.timestamp.toLocal();
+        return local.year == _selectedMonth.year &&
+            local.month == _selectedMonth.month;
+      }).toList();
+      final daysInMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + 1,
+        0,
+      ).day;
+
+      double wqi(HistoryReading reading) {
+        final pHScore = (100 - (reading.pH - 7.0).abs() * 35).clamp(0.0, 100.0);
+        final tdsScore =
+            (100 - ((reading.tds - 500).abs() / 500) * 100).clamp(0.0, 100.0);
+        final turbidityScore =
+            (100 - (reading.turbidity * 4.5)).clamp(0.0, 100.0);
+        final tempScore =
+            (100 - (reading.temperature - 25.0).abs() * 6).clamp(0.0, 100.0);
+        return (pHScore + tdsScore + turbidityScore + tempScore) / 4;
+      }
+
+      return metricOrder.map((metric) {
+        final dailyTotals = <int, double>{};
+        final dailyCounts = <int, int>{};
+
+        for (final reading in monthReadings) {
+          final day = reading.timestamp.toLocal().day;
+          final value = switch (metric.id) {
+            'pH' => reading.pH,
+            'TDS' => reading.tds,
+            'Turbidity' => reading.turbidity,
+            'Temp' => reading.temperature,
+            'WQI' => wqi(reading),
+            _ => 0.0,
+          };
+          dailyTotals[day] = (dailyTotals[day] ?? 0.0) + value;
+          dailyCounts[day] = (dailyCounts[day] ?? 0) + 1;
+        }
+
+        final values = List.generate(daysInMonth, (index) {
+          final day = index + 1;
+          final count = dailyCounts[day] ?? 0;
+          if (count == 0) return 0.0;
+          return (dailyTotals[day] ?? 0.0) / count;
+        });
+        final labels = List.generate(daysInMonth, (index) => '${index + 1}');
+
+        return _MetricReport(
+          id: metric.id,
+          title: metric.title,
+          unit: metric.unit,
+          color: metric.color,
+          values: values,
+          labels: labels,
+          minValue: metric.minValue,
+          maxValue: metric.maxValue,
+        );
+      }).toList();
+    }
+
     final points = readings.length > 30
         ? readings.sublist(readings.length - 30)
         : readings;
@@ -846,6 +1117,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         color: metric.color,
         values: values,
         labels: labels,
+        minValue: metric.minValue,
+        maxValue: metric.maxValue,
       );
     }).toList();
   }
@@ -886,9 +1159,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final hasHistory = snapshot.data!.isNotEmpty;
+
+          final historyReadings = snapshot.data!;
+          final selectedReadings = _readingsForDate(historyReadings, _selectedDate);
+
+          if (_viewMode == 'Daily' &&
+              historyReadings.isNotEmpty &&
+              selectedReadings.isEmpty &&
+              !_alertShownForDate) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _showNoDataDialog(_selectedDate);
+            });
+          }
+
+          final hasHistory = historyReadings.isNotEmpty;
+            final selectedMonthReadings = historyReadings.where((reading) {
+            final local = reading.timestamp.toLocal();
+            return local.year == _selectedMonth.year &&
+              local.month == _selectedMonth.month;
+            }).toList();
           final metrics = hasHistory
-              ? _buildHistoryMetricList(snapshot.data!)
+              ? (_viewMode == 'Monthly'
+                  ? _buildHistoryMetricList(historyReadings)
+                  : (selectedReadings.isEmpty
+                      ? _buildHistoryMetricList(const [])
+                      : _buildHistoryMetricList(selectedReadings)))
               : _buildMetricList();
           final selectedDateText = hasHistory
               ? 'Firebase history'
@@ -897,270 +1192,366 @@ class _ReportsScreenState extends State<ReportsScreen> {
           return Padding(
             padding: const EdgeInsets.all(16),
             child: ListView(
-          children: [
-            if (!hasHistory)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Charts show sample values until readings are saved under /sensorHistory.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.black54),
-                ),
-              ),
-            Container(
-              margin: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(26),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (!hasHistory)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Charts show sample values until readings are saved under /sensorHistory.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ),
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Column(
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Icon(
-                            Icons.calendar_today_rounded,
-                            size: 18,
-                            color: Colors.black87,
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today_rounded,
+                                size: 18,
+                                color: Colors.black87,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                hasHistory ? _formatDate(_selectedDate) : selectedDateText,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            selectedDateText,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: _pickDate,
+                                tooltip: 'Select date',
+                                icon: const Icon(Icons.calendar_month_rounded),
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  if (_viewMode == 'Daily') {
+                                    final monthDays = _daysInSelectedMonth();
+                                    final currentIndex = monthDays.indexWhere(
+                                      (date) =>
+                                          date.year == _selectedDate.year &&
+                                          date.month == _selectedDate.month &&
+                                          date.day == _selectedDate.day,
+                                    );
+                                    final nextIndex = (currentIndex - 1).clamp(
+                                      0,
+                                      monthDays.length - 1,
+                                    );
+                                    setState(() {
+                                      _selectedDate = monthDays[nextIndex];
+                                      _alertShownForDate = false;
+                                    });
+                                  } else {
+                                    setState(() {
+                                      _selectedMonthIndex =
+                                          (_selectedMonthIndex - 1).clamp(0, _months.length - 1);
+                                      _selectedMonth = DateTime(
+                                        DateTime.now().year,
+                                        _selectedMonthIndex + 1,
+                                      );
+                                      _selectedDate = DateTime(
+                                        _selectedMonth.year,
+                                        _selectedMonth.month,
+                                        1,
+                                      );
+                                      _alertShownForDate = false;
+                                    });
+                                  }
+                                },
+                                icon: const Icon(Icons.chevron_left),
+                                splashRadius: 18,
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  if (_viewMode == 'Daily') {
+                                    final monthDays = _daysInSelectedMonth();
+                                    final currentIndex = monthDays.indexWhere(
+                                      (date) =>
+                                          date.year == _selectedDate.year &&
+                                          date.month == _selectedDate.month &&
+                                          date.day == _selectedDate.day,
+                                    );
+                                    final nextIndex = (currentIndex + 1).clamp(
+                                      0,
+                                      monthDays.length - 1,
+                                    );
+                                    setState(() {
+                                      _selectedDate = monthDays[nextIndex];
+                                      _alertShownForDate = false;
+                                    });
+                                  } else {
+                                    setState(() {
+                                      _selectedMonthIndex =
+                                          (_selectedMonthIndex + 1).clamp(0, _months.length - 1);
+                                      _selectedMonth = DateTime(
+                                        DateTime.now().year,
+                                        _selectedMonthIndex + 1,
+                                      );
+                                      _selectedDate = DateTime(
+                                        _selectedMonth.year,
+                                        _selectedMonth.month,
+                                        1,
+                                      );
+                                      _alertShownForDate = false;
+                                    });
+                                  }
+                                },
+                                icon: const Icon(Icons.chevron_right),
+                                splashRadius: 18,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => _viewMode = 'Daily'),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: _viewMode == 'Daily'
+                                        ? Colors.white
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(999),
+                                    boxShadow: _viewMode == 'Daily'
+                                        ? [
+                                            const BoxShadow(
+                                              color: Color(0x0F000000),
+                                              blurRadius: 4,
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: const Center(child: Text('Daily')),
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => _viewMode = 'Monthly'),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: _viewMode == 'Monthly'
+                                        ? Colors.white
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(999),
+                                    boxShadow: _viewMode == 'Monthly'
+                                        ? [
+                                            const BoxShadow(
+                                              color: Color(0x0F000000),
+                                              blurRadius: 4,
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: const Center(child: Text('Monthly')),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () {
-                              if (_viewMode == 'Daily') {
-                                setState(
-                                  () => _selectedDayIndex =
-                                      (_selectedDayIndex - 1).clamp(
-                                        0,
-                                        _dayNumbers.length - 1,
+                      const SizedBox(height: 10),
+                      if (_viewMode == 'Daily')
+                        SizedBox(
+                          height: 78,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _daysInSelectedMonth().length,
+                            itemBuilder: (context, index) {
+                              final date = _daysInSelectedMonth()[index];
+                              final isSelected = date.year == _selectedDate.year &&
+                                  date.month == _selectedDate.month &&
+                                  date.day == _selectedDate.day;
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedDate = date;
+                                    _alertShownForDate = false;
+                                  });
+                                },
+                                child: Container(
+                                  width: 62,
+                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? const Color(0xFF7B4DE2)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        _weekdays[date.weekday % 7],
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.black87,
+                                        ),
                                       ),
-                                );
-                              } else {
-                                setState(
-                                  () => _selectedMonthIndex =
-                                      (_selectedMonthIndex - 1).clamp(
-                                        0,
-                                        _months.length - 1,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${date.day}',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.black87,
+                                        ),
                                       ),
-                                );
-                              }
+                                    ],
+                                  ),
+                                ),
+                              );
                             },
-                            icon: const Icon(Icons.chevron_left),
-                            splashRadius: 18,
                           ),
-                          IconButton(
-                            onPressed: () {
-                              if (_viewMode == 'Daily') {
-                                setState(
-                                  () => _selectedDayIndex =
-                                      (_selectedDayIndex + 1).clamp(
-                                        0,
-                                        _dayNumbers.length - 1,
+                        )
+                      else
+                        SizedBox(
+                          height: 78,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _months.length,
+                            itemBuilder: (context, index) {
+                              final isSelected = index == _selectedMonthIndex;
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedMonthIndex = index;
+                                    _selectedMonth = DateTime(
+                                      DateTime.now().year,
+                                      index + 1,
+                                    );
+                                    _selectedDate = DateTime(
+                                      _selectedMonth.year,
+                                      _selectedMonth.month,
+                                      1,
+                                    );
+                                    _alertShownForDate = false;
+                                  });
+                                },
+                                child: Container(
+                                  width: 74,
+                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? const Color(0xFF7B4DE2)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      _months[index],
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w600,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : Colors.black87,
                                       ),
-                                );
-                              } else {
-                                setState(
-                                  () => _selectedMonthIndex =
-                                      (_selectedMonthIndex + 1).clamp(
-                                        0,
-                                        _months.length - 1,
-                                      ),
-                                );
-                              }
+                                    ),
+                                  ),
+                                ),
+                              );
                             },
-                            icon: const Icon(Icons.chevron_right),
-                            splashRadius: 18,
                           ),
-                        ],
-                      ),
+                        ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                ),
+                const SizedBox(height: 18),
+                if (_viewMode == 'Daily' && hasHistory && selectedReadings.isEmpty)
                   Container(
-                    padding: const EdgeInsets.all(4),
+                    margin: const EdgeInsets.only(bottom: 18),
+                    padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(999),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _viewMode = 'Daily'),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _viewMode == 'Daily'
-                                    ? Colors.white
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: _viewMode == 'Daily'
-                                    ? [
-                                        const BoxShadow(
-                                          color: Color(0x0F000000),
-                                          blurRadius: 4,
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: const Center(child: Text('Daily')),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _viewMode = 'Monthly'),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _viewMode == 'Monthly'
-                                    ? Colors.white
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: _viewMode == 'Monthly'
-                                    ? [
-                                        const BoxShadow(
-                                          color: Color(0x0F000000),
-                                          blurRadius: 4,
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: const Center(child: Text('Monthly')),
-                            ),
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'No data was recorded on ${_formatDate(_selectedDate)}.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16, color: Colors.black87),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  if (_viewMode == 'Daily')
-                    Row(
-                      children: List.generate(_weekdays.length, (index) {
-                        final isSelected = index == _selectedDayIndex;
-                        return Expanded(
-                          child: GestureDetector(
-                            onTap: () =>
-                                setState(() => _selectedDayIndex = index),
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? const Color(0xFF7B4DE2)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    _weekdays[index],
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${_dayNumbers[index]}',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    )
-                  else
-                    Row(
-                      children: List.generate(_months.length, (index) {
-                        final isSelected = index == _selectedMonthIndex;
-                        return Expanded(
-                          child: GestureDetector(
-                            onTap: () =>
-                                setState(() => _selectedMonthIndex = index),
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? const Color(0xFF7B4DE2)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  _months[index],
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.black87,
-                                  ),
+                  )
+                else if (_viewMode == 'Monthly' && selectedMonthReadings.isEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 18),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      'No data was recorded in ${_months[_selectedMonthIndex]} ${_selectedMonth.year}.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16, color: Colors.black87),
+                    ),
+                  )
+                else
+                  for (final metric in metrics)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      child: _ReportCard(
+                        title: metric.title,
+                        subtitle: _viewMode == 'Daily'
+                            ? 'Selected date: ${_selectedDate.day}'
+                            : 'Selected month: ${_months[_selectedMonthIndex]}',
+                        child: SizedBox(
+                          height: 220,
+                          width: 900,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: 900,
+                              child: CustomPaint(
+                                painter: TrendChartPainter(
+                                  values: metric.values,
+                                  labels: metric.labels,
+                                  color: metric.color,
+                                  unit: metric.unit,
+                                  minValue: metric.minValue,
+                                  maxValue: metric.maxValue,
                                 ),
                               ),
                             ),
                           ),
-                        );
-                      }),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            for (final metric in metrics)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 18),
-                child: _ReportCard(
-                  title: metric.title,
-                  subtitle: _viewMode == 'Daily'
-                      ? 'Selected date: ${_dayNumbers[_selectedDayIndex]}'
-                      : 'Selected month: ${_months[_selectedMonthIndex]}',
-                  child: SizedBox(
-                    height: 220,
-                    width: 900,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: 900,
-                        child: CustomPaint(
-                          painter: TrendChartPainter(
-                            values: metric.values,
-                            labels: metric.labels,
-                            color: metric.color,
-                            unit: metric.unit,
-                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      );
+              ],
+            ),
+          );
         },
       ),
     );
@@ -1230,6 +1621,8 @@ class _MetricReport {
   final Color color;
   final List<double> values;
   final List<String> labels;
+  final double minValue;
+  final double maxValue;
 
   const _MetricReport({
     required this.id,
@@ -1238,6 +1631,8 @@ class _MetricReport {
     required this.color,
     required this.values,
     required this.labels,
+    required this.minValue,
+    required this.maxValue,
   });
 }
 
@@ -1281,18 +1676,22 @@ class TrendChartPainter extends CustomPainter {
   final List<String> labels;
   final Color color;
   final String unit;
+  final double minValue;
+  final double maxValue;
 
   const TrendChartPainter({
     required this.values,
     required this.labels,
     required this.color,
     required this.unit,
+    required this.minValue,
+    required this.maxValue,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    const left = 42.0;
-    const top = 20.0;
+    const left = 52.0;
+    const top = 42.0;
     const right = 20.0;
     const bottom = 34.0;
     final chartWidth = size.width - left - right;
@@ -1314,18 +1713,52 @@ class TrendChartPainter extends CustomPainter {
         colors: [color.withOpacity(0.6), color.withOpacity(0.1)],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
-    final minValue = values.reduce((a, b) => a < b ? a : b) * 0.9;
-    final maxValue = values.reduce((a, b) => a > b ? a : b) * 1.1;
-    final yRange = maxValue - minValue;
+    final effectiveMin = values.isEmpty ? minValue : minValue;
+    final effectiveMax = values.isEmpty ? maxValue : maxValue;
+    final yRange = effectiveMax - effectiveMin;
+
+    final tickCount = 4;
+    for (int i = 0; i <= tickCount; i++) {
+      final ratio = i / tickCount;
+      final y = top + chartHeight * (1 - ratio);
+      final value = effectiveMin + (yRange * ratio);
+
+      canvas.drawLine(
+        Offset(left, y),
+        Offset(size.width - right, y),
+        axisPaint,
+      );
+
+      final labelText = value >= 100
+          ? value.toStringAsFixed(0)
+          : value.toStringAsFixed(value >= 10 ? 0 : 1);
+      final labelPainter = TextPainter(
+        text: TextSpan(
+          text: labelText,
+          style: const TextStyle(
+            color: Colors.black54,
+            fontSize: 10,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      labelPainter.paint(
+        canvas,
+        Offset(4, y - labelPainter.height / 2 - 6),
+      );
+    }
 
     final points = <Offset>[];
-    for (int i = 0; i < values.length; i++) {
-      final x = left + (i / (values.length - 1)) * chartWidth;
-      final y =
-          size.height -
-          bottom -
-          ((values[i] - minValue) / (yRange == 0 ? 1 : yRange)) * chartHeight;
-      points.add(Offset(x, y));
+    if (values.isNotEmpty) {
+      final pointSpacing = values.length > 1 ? values.length - 1 : 1;
+      for (int i = 0; i < values.length; i++) {
+        final x = values.length == 1
+            ? left + chartWidth / 2
+            : left + (i / pointSpacing) * chartWidth;
+        final normalized = ((values[i] - effectiveMin) / (yRange == 0 ? 1 : yRange));
+        final y = top + chartHeight * (1 - normalized);
+        points.add(Offset(x, y));
+      }
     }
 
     canvas.drawLine(
@@ -1339,22 +1772,27 @@ class TrendChartPainter extends CustomPainter {
       axisPaint,
     );
 
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (int i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
+    if (points.isNotEmpty) {
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (int i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+
+      final fillPath = Path.from(path)
+        ..lineTo(size.width - right, size.height - bottom)
+        ..lineTo(left, size.height - bottom)
+        ..close();
+
+      canvas.drawPath(fillPath, fillPaint);
+      canvas.drawPath(path, linePaint);
     }
 
-    final fillPath = Path.from(path)
-      ..lineTo(size.width - right, size.height - bottom)
-      ..lineTo(left, size.height - bottom)
-      ..close();
-
-    canvas.drawPath(fillPath, fillPaint);
-    canvas.drawPath(path, linePaint);
-
     final textStyle = TextStyle(color: Colors.grey.shade600, fontSize: 10);
+    final labelSpacing = labels.length > 1 ? labels.length - 1 : 1;
     for (int i = 0; i < labels.length; i++) {
-      final x = left + (i / (labels.length - 1)) * chartWidth;
+      final x = labels.length == 1
+          ? left + chartWidth / 2
+          : left + (i / labelSpacing) * chartWidth;
       final label = labels[i];
       final textPainter = TextPainter(
         text: TextSpan(text: label, style: textStyle),
