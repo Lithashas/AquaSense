@@ -1,10 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'dashboard.dart';
+import 'firebase_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FirebaseService.initialize();
   runApp(const AquaSenseApp());
 }
 
