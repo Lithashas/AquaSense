@@ -9,16 +9,75 @@ Future<void> main() async {
   runApp(const AquaSenseApp());
 }
 
-class AquaSenseApp extends StatelessWidget {
+class AquaSenseApp extends StatefulWidget {
   const AquaSenseApp({super.key});
+
+  @override
+  State<AquaSenseApp> createState() => _AquaSenseAppState();
+}
+
+class _AquaSenseAppState extends State<AquaSenseApp> with WidgetsBindingObserver {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  bool _resetOnResume = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _resetOnResume = true;
+    } else if (state == AppLifecycleState.resumed && _resetOnResume) {
+      _resetOnResume = false;
+      _navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashScreen()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'AquaSense',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF12B8C4),
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF1FBFC),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF073B4C),
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          shadowColor: const Color(0x26073B4C),
+          surfaceTintColor: const Color(0xFFE2F8FA),
+        ),
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          selectedItemColor: Color(0xFF087F8C),
+          unselectedItemColor: Color(0xFF78909C),
+          backgroundColor: Colors.white,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF087F8C),
+            foregroundColor: Colors.white,
+          ),
+        ),
         useMaterial3: true,
       ),
       home: const SplashScreen(),
@@ -54,9 +113,9 @@ class _SplashScreenState extends State<SplashScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFFEAF8FF),
-                    Color(0xFFD9F1FF),
-                    Color(0xFFBFE7FF),
+                    Color(0xFFEAF7F8),
+                    Color(0xFFD5F1F2),
+                    Color(0xFFB8E7E8),
                   ],
                 ),
               ),
@@ -71,23 +130,20 @@ class _SplashScreenState extends State<SplashScreen> {
                   height: 140,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF46B7FF), Color(0xFF1B7EF2)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: Colors.black,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.blue.withOpacity(0.25),
+                        color: const Color(0xFF12B8C4).withOpacity(0.25),
                         blurRadius: 30,
                         offset: const Offset(0, 12),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.water_drop_rounded,
-                    size: 72,
-                    color: Colors.white,
+                  child: Image.asset(
+                    'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png',
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -96,7 +152,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   style: TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F4C81),
+                    color: Color(0xFF073B4C),
                     letterSpacing: 1.2,
                   ),
                 ),
@@ -105,7 +161,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   'Smart Water Monitoring',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Color(0xFF3277B7),
+                    color: Color(0xFF087F8C),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -116,10 +172,10 @@ class _SplashScreenState extends State<SplashScreen> {
                   child: ElevatedButton(
                     onPressed: _goToDashboard,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D8CF2),
+                      backgroundColor: const Color(0xFF12B8C4),
                       foregroundColor: Colors.white,
                       elevation: 8,
-                      shadowColor: Colors.blue.withOpacity(0.3),
+                      shadowColor: const Color(0xFF087F8C).withOpacity(0.3),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
                       ),
@@ -159,9 +215,9 @@ class WavePainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Color(0xFF7ED4FF),
-          Color(0xFF3FA9F5),
-          Color(0xFF1C84D9),
+          Color(0xFF6BE0E2),
+          Color(0xFF12B8C4),
+          Color(0xFF087F8C),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 

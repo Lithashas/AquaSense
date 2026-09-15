@@ -49,7 +49,7 @@ class _AppHomeScreenState extends State<AppHomeScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
-        selectedItemColor: Colors.blue[800],
+        selectedItemColor: const Color(0xFF087F8C),
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: _items,
@@ -82,7 +82,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF1FBFC),
       appBar: AppBar(
         title: const Text('AquaSense Dashboard'),
         backgroundColor: Colors.blue[800],
@@ -90,46 +90,81 @@ class DashboardScreen extends StatelessWidget {
         centerTitle: true,
         elevation: 0,
       ),
-      body: StreamBuilder<WaterReading>(
-        stream: FirebaseService.isConfigured ? _waterReadings() : null,
-        builder: (context, snapshot) {
-          if (!FirebaseService.isConfigured) {
-            return const _FirebaseMessage(
-              message:
-                  'Firebase is not configured. Run flutterfire configure, then restart the app.',
-              icon: Icons.settings_input_antenna_rounded,
-            );
-          }
-          if (snapshot.hasError) {
-            return _FirebaseMessage(
-              message:
-                  'Unable to read sensorData from Firebase. Check Firebase setup and database rules.',
-              icon: Icons.cloud_off_rounded,
-            );
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final reading = snapshot.data!;
-          final wqi = _calculateWqi(
-            reading.pH,
-            reading.tds,
-            reading.turbidity,
-            reading.temperature,
-          );
-          final isGoodToUse = wqi >= 70;
-          final statusColor = isGoodToUse ? Colors.green : Colors.red;
-          final statusText = isGoodToUse ? 'Good to use' : 'Not suitable';
-
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Live Reservoir Data',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Live Reservoir Data',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Status: Device Online (Battery: 85%)',
+              style: TextStyle(fontSize: 14, color: Colors.green[700]),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.08,
+                children: [
+                  GestureDetector(
+                    onTap: () => onMetricSelected('pH'),
+                    child: const SensorCard(
+                      title: 'pH Level',
+                      value: '7.2',
+                      unit: 'pH',
+                      icon: Icons.science,
+                      color: const Color(0xFF0B7285),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => onMetricSelected('TDS'),
+                    child: const SensorCard(
+                      title: 'TDS',
+                      value: '450',
+                      unit: 'ppm',
+                      icon: Icons.water_drop,
+                      color: const Color(0xFF12B8C4),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => onMetricSelected('Turbidity'),
+                    child: const SensorCard(
+                      title: 'Turbidity',
+                      value: '12',
+                      unit: 'NTU',
+                      icon: Icons.blur_on,
+                      color: const Color(0xFF087F8C),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => onMetricSelected('Temp'),
+                    child: const SensorCard(
+                      title: 'Temp',
+                      value: '28.5',
+                      unit: '°C',
+                      icon: Icons.thermostat,
+                      color: const Color(0xFF0F9D9A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => onMetricSelected('WQI'),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: statusColor.withOpacity(0.35)),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -287,32 +322,12 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Manual reading requested from ESP32...',
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text(
-                      'Take Reading Now',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF087F8C),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
               ],
@@ -412,13 +427,13 @@ class _DeviceConnectivityScreenState extends State<DeviceConnectivityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF1FBFC),
       appBar: AppBar(
         title: const Text(
           'Device Connectivity',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue[800],
+        backgroundColor: const Color(0xFF073B4C),
         foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
@@ -838,13 +853,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF1FBFC),
       appBar: AppBar(
         title: const Text(
           'Reports',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue[800],
+        backgroundColor: const Color(0xFF073B4C),
         foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
