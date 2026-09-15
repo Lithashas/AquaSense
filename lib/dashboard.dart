@@ -50,7 +50,7 @@ class _AppHomeScreenState extends State<AppHomeScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
-        selectedItemColor: Colors.blue[800],
+        selectedItemColor: const Color(0xFF087F8C),
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: _items,
@@ -87,13 +87,13 @@ class DashboardScreen extends StatelessWidget {
     final statusText = isGoodToUse ? 'Good to use' : 'Not suitable';
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF1FBFC),
       appBar: AppBar(
         title: const Text(
           'AquaSense Dashboard',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue[800],
+        backgroundColor: const Color(0xFF073B4C),
         foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
@@ -127,7 +127,7 @@ class DashboardScreen extends StatelessWidget {
                       value: '7.2',
                       unit: 'pH',
                       icon: Icons.science,
-                      color: Colors.purple,
+                      color: const Color(0xFF0B7285),
                     ),
                   ),
                   GestureDetector(
@@ -137,7 +137,7 @@ class DashboardScreen extends StatelessWidget {
                       value: '450',
                       unit: 'ppm',
                       icon: Icons.water_drop,
-                      color: Colors.blue,
+                      color: const Color(0xFF12B8C4),
                     ),
                   ),
                   GestureDetector(
@@ -147,7 +147,7 @@ class DashboardScreen extends StatelessWidget {
                       value: '12',
                       unit: 'NTU',
                       icon: Icons.blur_on,
-                      color: Colors.brown,
+                      color: const Color(0xFF087F8C),
                     ),
                   ),
                   GestureDetector(
@@ -157,7 +157,7 @@ class DashboardScreen extends StatelessWidget {
                       value: '28.5',
                       unit: '°C',
                       icon: Icons.thermostat,
-                      color: Colors.orange,
+                      color: const Color(0xFF0F9D9A),
                     ),
                   ),
                 ],
@@ -276,7 +276,7 @@ class DashboardScreen extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[800],
+                  backgroundColor: const Color(0xFF087F8C),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -335,13 +335,13 @@ class _DeviceConnectivityScreenState extends State<DeviceConnectivityScreen> {
     final isOnline = selectedDevice['status'] == 'Connected' || selectedDevice['status'] == 'Stable';
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF1FBFC),
       appBar: AppBar(
         title: const Text(
           'Device Connectivity',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue[800],
+        backgroundColor: const Color(0xFF073B4C),
         foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
@@ -707,13 +707,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
         : '${_months[_selectedMonthIndex]} 2025';
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF1FBFC),
       appBar: AppBar(
         title: const Text(
           'Reports',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue[800],
+        backgroundColor: const Color(0xFF073B4C),
         foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
